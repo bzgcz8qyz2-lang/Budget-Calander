@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<title>Budget Calendar</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c26;
+    --surface3: #252532;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f8;
+    --text2: #9090a8;
+    --text3: #5a5a72;
+    --green: #2ecc71;
+    --green-dim: rgba(46,204,113,0.12);
+    --red: #e74c6b;
+    --red-dim: rgba(231,76,107,0.12);
+    --accent: #7c6ef7;
+    --accent-dim: rgba(124,110,247,0.15);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  .screen { display: none; flex-direction: column; min-height: 100vh; min-height: -webkit-fill-available; }
+  .screen.active { display: flex; }
+
+  .nav-bar {
+    padding: calc(var(--safe-top) + 14px) 20px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .nav-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .nav-btn {
+    background: var(--surface2); border: none; color: var(--text);
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; cursor: pointer;
+  }
+  .nav-btn:active { background: var(--surface3); }
+  .nav-btn.accent { background: var(--accent); }
+
+  .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: calc(80px + var(--safe-bottom)); }
+
+  .tab-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 8px 0 calc(var(--safe-bottom) + 8px);
+    background: var(--surface);
+    border-top: 0.5px solid var(--border);
+    display: flex; z-index: 20;
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; padding: 4px 0; color: var(--text3); transition: color 0.15s;
+  }
+  .tab.active { color: var(--accent); }
+  .tab svg { width: 22px; height: 22px; }
+  .tab span { font-size: 10px; font-weight: 500; }
+
+  /* CALENDAR */
+  .cal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 8px;
+  }
+  .cal-month { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-nav-btn {
+    background: var(--surface2); border: none; color: var(--text2);
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer;
+  }
+  .cal-nav-btn:active { background: var(--surface3); }
+
+  .cal-grid { padding: 8px 12px; }
+  .cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+  .cal-dow span {
+    text-align: center; font-size: 11px; font-weight: 600;
+    color: var(--text3); letter-spacing: 0.5px; padding: 4px 0; text-transform: uppercase;
+  }
+  .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-day {
+    aspect-ratio: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 10px; cursor: pointer; padding: 2px; transition: background 0.12s;
+  }
+  .cal-day:active { background: var(--surface2); }
+  .cal-day.empty { cursor: default; }
+  .cal-day.today .day-num {
+    background: var(--accent); color: white;
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cal-day.selected { background: var(--accent-dim); }
+  .cal-day.selected .day-num { color: var(--accent); }
+  .day-num { font-size: 14px; font-weight: 500; line-height: 1; }
+  .day-dot { width: 4px; height: 4px; border-radius: 50%; margin-top: 2px; }
+  .day-dot.income { background: var(--green); }
+  .day-dot.expense { background: var(--red); }
+  .day-dot.both { background: linear-gradient(90deg, var(--green) 50%, var(--red) 50%); width: 8px; }
+  .day-dot.none { opacity: 0; }
+
+  /* BALANCE HERO */
+  .balance-hero {
+    margin: 12px 16px; background: var(--surface);
+    border-radius: 20px; padding: 20px; border: 0.5px solid var(--border);
+  }
+  .balance-date { font-size: 12px; color: var(--text3); font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; margin-bottom: 6px; }
+  .balance-amount { font-size: 38px; font-weight: 700; letter-spacing: -1.5px; }
+  .balance-amount.positive { color: var(--green); }
+  .balance-amount.negative { color: var(--red); }
+  .balance-amount.zero { color: var(--text2); }
+  .balance-row { display: flex; gap: 12px; margin-top: 14px; }
+  .balance-stat { flex: 1; background: var(--surface2); border-radius: 12px; padding: 12px; }
+  .balance-stat-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .balance-stat-val { font-size: 16px; font-weight: 600; }
+  .income-val { color: var(--green); }
+  .expense-val { color: var(--red); }
+
+  /* STARTING BALANCE PROMPT */
+  .setup-card {
+    margin: 16px; background: var(--surface); border-radius: 16px;
+    padding: 20px; border: 0.5px solid var(--accent);
+  }
+  .setup-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .setup-card p { font-size: 13px; color: var(--text2); margin-bottom: 14px; line-height: 1.5; }
+  .setup-row { display: flex; gap: 8px; }
+  .setup-input {
+    flex: 1; background: var(--surface2); border: 0.5px solid var(--border2);
+    border-radius: 10px; padding: 11px 14px; color: var(--text);
+    font-size: 16px; font-family: inherit; outline: none; -webkit-appearance: none;
+  }
+  .setup-input:focus { border-color: var(--accent); }
+  .setup-btn {
+    background: var(--accent); color: white; border: none;
+    border-radius: 10px; padding: 11px 18px; font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .setup-btn:active { opacity: 0.8; }
+
+  /* DAY EVENTS */
+  .day-events { padding: 0 16px; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text3); letter-spacing: 0.5px; text-transform: uppercase; margin: 16px 0 8px; }
+
+  .event-item {
+    background: var(--surface); border-radius: 14px; padding: 14px 16px;
+    margin-bottom: 8px; border: 0.5px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .event-item:active { background: var(--surface2); }
+  .event-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .event-icon.income { background: var(--green-dim); }
+  .event-icon.expense { background: var(--red-dim); }
+  .event-info { flex: 1; min-width: 0; }
+  .event-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-recur { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .event-amount { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; }
+  .event-amount.income { color: var(--green); }
+  .event-amount.expense { color: var(--red); }
+  .empty-day { text-align: center; padding: 32px 0; color: var(--text3); font-size: 14px; }
+
+  /* TREND */
+  .trend-wrap { padding: 8px 16px 16px; }
+  .trend-card { background: var(--surface); border-radius: 16px; padding: 16px; border: 0.5px solid var(--border); }
+  .trend-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px; }
+  .mini-bars { display: flex; align-items: flex-end; gap: 3px; height: 50px; }
+  .mini-bar-label { display: flex; justify-content: space-around; margin-top: 4px; }
+  .mini-bar-label span { font-size: 9px; color: var(--text3); }
+
+  /* RECURRING SCREEN */
+  .list-section { padding: 8px 16px 0; }
+  .recur-item {
+    background: var(--surface); border-radius: 14px; padding: 14px 16px;
+    margin-bottom: 8px; border: 0.5px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .recur-info { flex: 1; min-width: 0; }
+  .recur-name { font-size: 15px; font-weight: 600; }
+  .recur-detail { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .recur-amount { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; margin-right: 6px; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; flex-shrink: 0;
+  }
+  .edit-btn { background: var(--accent-dim); color: var(--accent); }
+  .del-btn { background: var(--red-dim); color: var(--red); }
+  .icon-btn:active { opacity: 0.6; }
+
+  /* SHEET */
+  .sheet-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65); z-index: 100;
+    align-items: flex-end; backdrop-filter: blur(4px);
+  }
+  .sheet-overlay.open { display: flex; animation: fadeIn 0.18s; }
+  @keyframes fadeIn { from { opacity: 0; } }
+
+  .sheet {
+    width: 100%; background: var(--surface);
+    border-radius: 24px 24px 0 0;
+    padding: 0 0 calc(var(--safe-bottom) + 16px);
+    animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1);
+    max-height: 90vh; overflow-y: auto;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+
+  .sheet-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 12px auto 4px; }
+  .sheet-title { font-size: 17px; font-weight: 700; text-align: center; padding: 12px 20px 4px; }
+
+  .form-group { padding: 10px 20px; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--text3); letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; background: var(--surface2); border: 0.5px solid var(--border2);
+    border-radius: 12px; padding: 13px 16px; color: var(--text);
+    font-size: 16px; font-family: inherit; outline: none; -webkit-appearance: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  select.form-input option { background: #1c1c26; }
+
+  .type-toggle { display: flex; gap: 8px; }
+  .type-btn {
+    flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text2); font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; font-family: inherit;
+  }
+  .type-btn.income.active { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .type-btn.expense.active { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+
+  .emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .emoji-opt {
+    aspect-ratio: 1; border-radius: 10px; border: 1.5px solid transparent;
+    background: var(--surface2); display: flex; align-items: center; justify-content: center;
+    font-size: 20px; cursor: pointer; transition: all 0.12s;
+  }
+  .emoji-opt.selected { border-color: var(--accent); background: var(--accent-dim); }
+
+  .submit-btn {
+    margin: 8px 20px; width: calc(100% - 40px);
+    background: var(--accent); color: white; border: none;
+    border-radius: 14px; padding: 15px; font-size: 16px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .submit-btn:active { opacity: 0.8; }
+
+  .confirm-sheet { padding: 20px; }
+  .confirm-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .confirm-msg { color: var(--text2); font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
+  .confirm-btns { display: flex; flex-direction: column; gap: 8px; }
+  .cfm-btn {
+    padding: 15px; border-radius: 14px; border: none; font-size: 16px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .cfm-btn.danger { background: var(--red); color: white; }
+  .cfm-btn.cancel { background: var(--surface2); color: var(--text); }
+
+  ::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+
+<!-- CALENDAR SCREEN -->
+<div class="screen active" id="screen-calendar">
+  <div class="nav-bar">
+    <div style="width:34px"></div>
+    <span class="nav-title">Budget</span>
+    <button class="nav-btn accent" onclick="openAddSheet()">+</button>
+  </div>
+  <div class="scroll">
+    <div class="cal-header">
+      <span class="cal-month" id="cal-month-label"></span>
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
+        <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      <div class="cal-dow">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div class="cal-days" id="cal-days"></div>
+    </div>
+    <div id="balance-section"></div>
+    <div id="setup-section"></div>
+    <div class="day-events" id="day-events"></div>
+    <div class="trend-wrap" id="trend-section"></div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab active" onclick="showScreen('calendar')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Calendar</span>
+    </div>
+    <div class="tab" onclick="showScreen('recurring')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+      <span>Recurring</span>
+    </div>
+  </div>
+</div>
+
+<!-- RECURRING SCREEN -->
+<div class="screen" id="screen-recurring">
+  <div class="nav-bar">
+    <div style="width:34px"></div>
+    <span class="nav-title">Recurring</span>
+    <button class="nav-btn accent" onclick="openAddSheet()">+</button>
+  </div>
+  <div class="scroll">
+    <div class="list-section">
+      <p class="section-title">Income</p>
+      <div id="income-list"></div>
+      <p class="section-title" style="margin-top:20px">Expenses</p>
+      <div id="expense-list"></div>
+      <div id="empty-recurring" style="text-align:center;padding:40px 0;color:var(--text3);font-size:14px;line-height:2">
+        No recurring entries yet.<br>Tap + to add one.
+      </div>
+    </div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab" onclick="showScreen('calendar')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Calendar</span>
+    </div>
+    <div class="tab active" onclick="showScreen('recurring')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+      <span>Recurring</span>
+    </div>
+  </div>
+</div>
+
+<!-- ADD / EDIT SHEET -->
+<div class="sheet-overlay" id="add-sheet" onclick="closeIfOverlay(event,'add-sheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheet-title">Add Entry</div>
+    <div class="form-group">
+      <label class="form-label">Type</label>
+      <div class="type-toggle">
+        <button class="type-btn income active" id="type-income" onclick="setType('income')">📈 Income</button>
+        <button class="type-btn expense" id="type-expense" onclick="setType('expense')">📉 Expense</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="entry-name" type="text" placeholder="e.g. Salary, Netflix…" maxlength="30" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Amount ($)</label>
+      <input class="form-input" id="entry-amount" type="number" inputmode="decimal" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Frequency</label>
+      <select class="form-input" id="entry-freq">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+        <option value="biweekly">Bi-weekly</option>
+        <option value="yearly">Yearly</option>
+        <option value="daily">Daily</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Start Date</label>
+      <input class="form-input" id="entry-start-date" type="date">
+    </div>
+    <div class="form-group" id="day-field">
+      <label class="form-label" id="day-field-label">Day of Month</label>
+      <input class="form-input" id="entry-day" type="number" inputmode="numeric" placeholder="1–31" min="1" max="31">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Icon</label>
+      <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+    <button class="submit-btn" id="submit-btn" onclick="saveEntry()">Save</button>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="sheet-overlay" id="del-sheet" onclick="closeIfOverlay(event,'del-sheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="confirm-sheet">
+      <div class="confirm-title">Delete Entry</div>
+      <div class="confirm-msg" id="del-msg"></div>
+      <div class="confirm-btns">
+        <button class="cfm-btn danger" onclick="confirmDelete()">Delete</button>
+        <button class="cfm-btn cancel" onclick="closeSheet('del-sheet')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'budget_entries_v2';
+const BALANCE_KEY = 'budget_starting_balance';
+const BALANCE_SET_KEY = 'budget_balance_set';
+
+let entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let startingBalance = parseFloat(localStorage.getItem(BALANCE_KEY) || '0');
+let balanceIsSet = localStorage.getItem(BALANCE_SET_KEY) === 'true';
+
+let selectedDate = new Date();
+let viewYear = selectedDate.getFullYear();
+let viewMonth = selectedDate.getMonth();
+let editingId = null;
+let deletingId = null;
+let currentType = 'income';
+
+const INCOME_EMOJIS = ['💰','💵','💳','🏦','📈','🎯','🏠','💼','🎓','💎','🚀','⭐'];
+const EXPENSE_EMOJIS = ['🛒','🍕','☕','🚗','💊','🎬','🛡️','📱','✈️','🏋️','📚','🎮'];
+const EMOJIS_BY_TYPE = { income: INCOME_EMOJIS, expense: EXPENSE_EMOJIS };
+let selectedEmoji = INCOME_EMOJIS[0];
+
+const FREQ_LABELS = { daily:'Daily', weekly:'Weekly', biweekly:'Bi-weekly', monthly:'Monthly', yearly:'Yearly' };
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
+
+function setStartingBalance() {
+  const val = parseFloat(document.getElementById('starting-balance-input').value);
+  if (isNaN(val)) return;
+  startingBalance = val;
+  balanceIsSet = true;
+  localStorage.setItem(BALANCE_KEY, startingBalance);
+  localStorage.setItem(BALANCE_SET_KEY, 'true');
+  renderDayPanel();
+}
+
+// ── FREQUENCY LOGIC ────────────────────────────────────────────
+function isActiveOnDate(entry, date) {
+  const d = new Date(date); d.setHours(0,0,0,0);
+
+  const startDate = new Date(entry.startDate || new Date());
+  startDate.setHours(0,0,0,0);
+
+  if (d < startDate) return false;
+  const day = d.getDate();
+  const month = d.getMonth();
+  const dow = d.getDay();
+  switch(entry.freq) {
+    case 'daily': return true;
+    case 'monthly': return day === entry.day;
+    case 'yearly': {
+      const sd = new Date(entry.startDate || new Date().toISOString().split('T')[0]);
+      return month === sd.getMonth() && day === sd.getDate();
+    }
+    case 'weekly': return dow === (entry.day % 7);
+    case 'biweekly': {
+      const ref = new Date('2024-01-01');
+      const diff = Math.floor((d - ref) / 86400000);
+      return Math.floor(diff / 7) % 2 === 0 ? dow === (entry.day % 7) : false;
+    }
+  }
+  return false;
+}
+
+function getDayTotal(date) {
+  let income = 0, expense = 0;
+  entries.forEach(e => {
+    if (isActiveOnDate(e, date)) {
+      if (e.type === 'income') income += e.amount;
+      else expense += e.amount;
+    }
+  });
+  return { income, expense, net: income - expense };
+}
+
+function getBalanceOnDate(date) {
+  const d = new Date(date); d.setHours(23,59,59,999);
+  const start = new Date(d.getFullYear(), 0, 1);
+  let balance = startingBalance;
+  for (let cur = new Date(start); cur <= d; cur.setDate(cur.getDate()+1)) {
+    balance += getDayTotal(cur).net;
+  }
+  return balance;
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────
+function renderCalendar() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  const startDow = firstDay.getDay();
+
+  document.getElementById('cal-month-label').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+  const grid = document.getElementById('cal-days');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < startDow; i++) {
+    const b = document.createElement('div');
+    b.className = 'cal-day empty';
+    grid.appendChild(b);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(viewYear, viewMonth, d);
+    const isToday = date.getTime() === today.getTime();
+    const isSel = date.getFullYear()===selectedDate.getFullYear() && date.getMonth()===selectedDate.getMonth() && date.getDate()===selectedDate.getDate();
+    const t = getDayTotal(date);
+
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (isToday?' today':'') + (isSel?' selected':'');
+    el.onclick = () => selectDate(date);
+
+    const numEl = document.createElement('div');
+    numEl.className = 'day-num';
+    numEl.textContent = d;
+    el.appendChild(numEl);
+
+    const dot = document.createElement('div');
+    const dc = t.income>0 && t.expense>0 ? 'both' : t.income>0 ? 'income' : t.expense>0 ? 'expense' : 'none';
+    dot.className = 'day-dot ' + dc;
+    el.appendChild(dot);
+    grid.appendChild(el);
+  }
+  renderDayPanel();
+}
+
+function selectDate(date) {
+  selectedDate = new Date(date);
+  renderCalendar();
+}
+
+function changeMonth(dir) {
+  viewMonth += dir;
+  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderCalendar();
+}
+
+// ── DAY PANEL ──────────────────────────────────────────────────
+function renderDayPanel() {
+  const d = selectedDate;
+  const dateStr = d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+  const balance = getBalanceOnDate(d);
+  const today = getDayTotal(d);
+  const fmt = n => '$' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const balClass = balance > 0 ? 'positive' : balance < 0 ? 'negative' : 'zero';
+
+  document.getElementById('balance-section').innerHTML = `
+    <div class="balance-hero">
+      <div class="balance-date">${dateStr}</div>
+      <div class="balance-amount ${balClass}">${balance<0?'-':''}${fmt(balance)}</div>
+      <div class="balance-row">
+        <div class="balance-stat">
+          <div class="balance-stat-label">In Today</div>
+          <div class="balance-stat-val income-val">+${fmt(today.income)}</div>
+        </div>
+        <div class="balance-stat">
+          <div class="balance-stat-label">Out Today</div>
+          <div class="balance-stat-val expense-val">-${fmt(today.expense)}</div>
+        </div>
+        <div class="balance-stat">
+          <div class="balance-stat-label">Net</div>
+          <div class="balance-stat-val ${today.net>=0?'income-val':'expense-val'}">${today.net>=0?'+':'-'}${fmt(today.net)}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Show starting balance prompt if not set
+  const setupEl = document.getElementById('setup-section');
+  if (!balanceIsSet) {
+    setupEl.innerHTML = `
+      <div class="setup-card">
+        <h3>Set Starting Balance</h3>
+        <p>Enter your current account balance to get accurate projections. You can update this any time.</p>
+        <div class="setup-row">
+          <input class="setup-input" id="starting-balance-input" type="number" inputmode="decimal" placeholder="e.g. 1500.00" step="0.01">
+          <button class="setup-btn" onclick="setStartingBalance()">Set</button>
+        </div>
+      </div>`;
+  } else {
+    setupEl.innerHTML = '';
+  }
+
+  const eventsEl = document.getElementById('day-events');
+  const dayEntries = entries.filter(e => isActiveOnDate(e, d));
+
+  if (dayEntries.length === 0) {
+    eventsEl.innerHTML = `<p class="section-title">Today's Activity</p><div class="empty-day">No transactions on this day</div>`;
+  } else {
+    let html = `<p class="section-title">Today's Activity</p>`;
+    dayEntries.forEach(e => {
+      html += `<div class="event-item" onclick="editEntry('${e.id}')">
+        <div class="event-icon ${e.type}">${e.emoji}</div>
+        <div class="event-info">
+          <div class="event-name">${e.name}</div>
+          <div class="event-recur">${FREQ_LABELS[e.freq]}</div>
+        </div>
+        <div class="event-amount ${e.type}">${e.type==='income'?'+':'-'}${fmt(e.amount)}</div>
+      </div>`;
+    });
+    eventsEl.innerHTML = html;
+  }
+
+  renderTrendBars();
+}
+
+function renderTrendBars() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() - i);
+    const t = getDayTotal(d);
+    days.push({ label: d.toLocaleDateString('en-US',{weekday:'narrow'}), income: t.income, expense: t.expense });
+  }
+  const maxVal = Math.max(...days.map(d => Math.max(d.income, d.expense)), 1);
+
+  const bars = days.map(d => {
+    const ih = Math.round((d.income / maxVal) * 46);
+    const eh = Math.round((d.expense / maxVal) * 46);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div style="width:100%;border-radius:3px 3px 0 0;background:var(--green);opacity:0.75;height:${Math.max(ih,2)}px"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div style="width:100%;border-radius:3px 3px 0 0;background:var(--red);opacity:0.75;height:${Math.max(eh,2)}px"></div>
+    </div>`;
+  }).join('');
+
+  const labels = days.map(d => `<span style="flex:2;text-align:center">${d.label}</span>`).join('');
+
+  document.getElementById('trend-section').innerHTML = `
+    <div class="trend-card">
+      <div class="trend-label">7-day overview
+        <span style="float:right;color:var(--green);font-size:11px;margin-left:8px">■ In</span>
+        <span style="float:right;color:var(--red);font-size:11px">■ Out</span>
+      </div>
+      <div class="mini-bars">${bars}</div>
+      <div class="mini-bar-label">${labels}</div>
+    </div>`;
+}
+
+// ── RECURRING LIST ────────────────────────────────────────────
+function renderRecurring() {
+  const incomeEl = document.getElementById('income-list');
+  const expenseEl = document.getElementById('expense-list');
+  const emptyEl = document.getElementById('empty-recurring');
+  const incomes = entries.filter(e => e.type === 'income');
+  const expenses = entries.filter(e => e.type === 'expense');
+
+  emptyEl.style.display = (incomes.length === 0 && expenses.length === 0) ? 'block' : 'none';
+
+  const fmt = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const renderList = (list, el) => {
+    if (list.length === 0) { el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:4px 0 8px">None added yet</div>'; return; }
+    el.innerHTML = list.map(e => `
+      <div class="recur-item">
+        <div class="event-icon ${e.type}" style="width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${e.emoji}</div>
+        <div class="recur-info">
+          <div class="recur-name">${e.name}</div>
+          <div class="recur-detail">${FREQ_LABELS[e.freq]}${e.freq!=='daily'?' · Day '+e.day:''}</div>
+        </div>
+        <div class="recur-amount ${e.type}">${e.type==='income'?'+':'-'}${fmt(e.amount)}</div>
+        <button class="icon-btn edit-btn" onclick="editEntry('${e.id}')">✎</button>
+        <button class="icon-btn del-btn" onclick="promptDelete('${e.id}')">✕</button>
+      </div>`).join('');
+  };
+
+  renderList(incomes, incomeEl);
+  renderList(expenses, expenseEl);
+}
+
+// ── ADD / EDIT ────────────────────────────────────────────────
+function openAddSheet() {
+  editingId = null;
+  currentType = 'income';
+  selectedEmoji = INCOME_EMOJIS[0];
+  document.getElementById('sheet-title').textContent = 'Add Recurring Entry';
+  document.getElementById('entry-name').value = '';
+  document.getElementById('entry-amount').value = '';
+  document.getElementById('entry-freq').value = 'monthly';
+  document.getElementById('entry-day').value = '';
+  document.getElementById('entry-start-date').value =
+    new Date().toISOString().split('T')[0];
+  setType('income');
+  updateFreqUI();
+  renderEmojiGrid();
+  document.getElementById('submit-btn').textContent = 'Add Entry';
+  document.getElementById('add-sheet').classList.add('open');
+  setTimeout(() => document.getElementById('entry-name').focus(), 350);
+}
+
+function editEntry(id) {
+  const e = entries.find(x => x.id === id);
+  if (!e) return;
+  editingId = id;
+  currentType = e.type;
+  selectedEmoji = e.emoji;
+  document.getElementById('sheet-title').textContent = 'Edit Entry';
+  document.getElementById('entry-name').value = e.name;
+  document.getElementById('entry-amount').value = e.amount;
+  document.getElementById('entry-freq').value = e.freq;
+  document.getElementById('entry-day').value = e.day;
+  document.getElementById('entry-start-date').value = e.startDate || '';
+  setType(e.type);
+  updateFreqUI();
+  renderEmojiGrid();
+  document.getElementById('submit-btn').textContent = 'Save Changes';
+  document.getElementById('add-sheet').classList.add('open');
+}
+
+function setType(t) {
+  currentType = t;
+  document.getElementById('type-income').className = 'type-btn income' + (t==='income'?' active':'');
+  document.getElementById('type-expense').className = 'type-btn expense' + (t==='expense'?' active':'');
+  selectedEmoji = EMOJIS_BY_TYPE[t][0];
+  renderEmojiGrid();
+}
+
+function renderEmojiGrid() {
+  document.getElementById('emoji-grid').innerHTML = EMOJIS_BY_TYPE[currentType].map(em =>
+    `<div class="emoji-opt${em===selectedEmoji?' selected':''}" onclick="selectEmoji('${em}')">${em}</div>`
+  ).join('');
+}
+
+function selectEmoji(em) { selectedEmoji = em; renderEmojiGrid(); }
+
+document.getElementById('entry-freq').addEventListener('change', updateFreqUI);
+
+function updateFreqUI() {
+  const freq = document.getElementById('entry-freq').value;
+  const startDate = document.getElementById('entry-start-date').value || new Date().toISOString().split('T')[0];
+  const dayField = document.getElementById('day-field');
+  const dayLabel = document.getElementById('day-field-label');
+  const dayInput = document.getElementById('entry-day');
+  if (freq === 'daily') { dayField.style.display = 'none'; return; }
+  dayField.style.display = 'block';
+  if (freq === 'monthly') { dayLabel.textContent = 'Day of Month (1–31)'; dayInput.max = 31; dayInput.placeholder = '1–31'; }
+  else if (freq === 'weekly' || freq === 'biweekly') { dayLabel.textContent = 'Day of Week (0 = Sun … 6 = Sat)'; dayInput.max = 6; dayInput.placeholder = '0–6'; }
+  else if (freq === 'yearly') { dayLabel.textContent = 'Day of Month'; dayInput.max = 31; dayInput.placeholder = '1–31'; }
+}
+
+function saveEntry() {
+  const name = document.getElementById('entry-name').value.trim();
+  const amount = parseFloat(document.getElementById('entry-amount').value);
+  const freq = document.getElementById('entry-freq').value;
+  const startDate = document.getElementById('entry-start-date').value || new Date().toISOString().split('T')[0];
+  const day = freq === 'daily' ? 1 : parseInt(document.getElementById('entry-day').value);
+
+  if (!name) { document.getElementById('entry-name').focus(); return; }
+  if (isNaN(amount) || amount <= 0) { document.getElementById('entry-amount').focus(); return; }
+  if (freq !== 'daily' && isNaN(day)) { document.getElementById('entry-day').focus(); return; }
+
+  if (editingId) {
+    const idx = entries.findIndex(x => x.id === editingId);
+    entries[idx] = {
+      ...entries[idx],
+      name,
+      amount,
+      freq,
+      day: day || 1,
+      type: currentType,
+      emoji: selectedEmoji,
+      startDate
+    };
+  } else {
+    entries.push({
+      id: Date.now().toString(),
+      name,
+      amount,
+      freq,
+      day: day || 1,
+      type: currentType,
+      emoji: selectedEmoji,
+      startDate
+    });
+  }
+
+  save();
+  closeSheet('add-sheet');
+  renderCalendar();
+  renderRecurring();
+}
+
+// ── DELETE ────────────────────────────────────────────────────
+function promptDelete(id) {
+  deletingId = id;
+  const e = entries.find(x => x.id === id);
+  document.getElementById('del-msg').textContent = `Are you sure you want to delete "${e.name}"? This cannot be undone.`;
+  document.getElementById('del-sheet').classList.add('open');
+}
+
+function confirmDelete() {
+  entries = entries.filter(x => x.id !== deletingId);
+  deletingId = null;
+  save();
+  closeSheet('del-sheet');
+  renderCalendar();
+  renderRecurring();
+}
+
+function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+function closeIfOverlay(e, id) { if (e.target.id === id) closeSheet(id); }
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('.tab-bar').forEach(bar => {
+    bar.querySelectorAll('.tab').forEach((tab, i) => {
+      tab.classList.toggle('active', (name==='calendar'&&i===0)||(name==='recurring'&&i===1));
+    });
+  });
+  if (name === 'recurring') renderRecurring();
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+updateFreqUI();
+renderCalendar();
+renderRecurring();
+</script>
+</body>
+</html>
